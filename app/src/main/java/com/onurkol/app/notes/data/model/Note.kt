@@ -12,5 +12,7 @@ data class Note(
     val timestamp: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
     val colorHex: Long = 0xFFFFFFFF,
-    val category: String = "General"
+    val category: String = "General",
+    val isLocked: Boolean = false,
+    val password: String? = null
 )

@@ -17,6 +17,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id")
     fun getNoteById(id: Long): Flow<Note?>
 
+    @Query("SELECT * FROM notes WHERE id = :id")
+    suspend fun getNoteByIdSync(id: Long): Note?
+
     @Query("SELECT * FROM notes WHERE title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%' ORDER BY isPinned DESC, timestamp DESC")
     fun searchNotes(query: String): Flow<List<Note>>
 

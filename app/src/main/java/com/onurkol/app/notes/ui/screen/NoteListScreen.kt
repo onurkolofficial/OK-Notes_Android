@@ -72,6 +72,10 @@ fun NoteListScreen(
 
     var isSearchActive by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var noteToDelete by remember { mutableStateOf<Note?>(null) }
+    var noteToUnlock by remember { mutableStateOf<Note?>(null) }
+    var unlockPassword by remember { mutableStateOf("") }
+    var unlockError by remember { mutableStateOf(false) }
 
     val lang = settings.appLanguage
     
@@ -103,7 +107,7 @@ fun NoteListScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
@@ -122,7 +126,7 @@ fun NoteListScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
                 )
             )
@@ -346,28 +350,116 @@ fun NoteListScreen(
                 }
             } else {
                 // Content View
+                val activeCategoryName = selectedCategory?.let { getCategoryDisplayName(it) } ?: stringResource(R.string.category_all)
+                
+                val handleNoteClick: (Note) -> Unit = { note ->
+                    if (note.isLocked) {
+                        noteToUnlock = note
+                        unlockPassword = ""
+                        unlockError = false
+                    } else {
+                        onNavigateToNoteDetail(note.id)
+                    }
+                }
+
                 if (settings.viewMode == ViewMode.GRID) {
                     NoteGrid(
                         notes = filteredNotes,
+                        activeCategoryName = activeCategoryName,
                         lang = lang,
-                        onNoteClick = { onNavigateToNoteDetail(it.id) },
+                        onNoteClick = handleNoteClick,
                         onPinClick = { noteViewModel.togglePin(it) },
-                        onDeleteClick = { noteViewModel.deleteNote(it) },
+                        onDeleteClick = { noteToDelete = it },
                         onReorder = { reorderedList -> noteViewModel.persistNoteOrder(reorderedList) },
                         modifier = Modifier.weight(1f)
                     )
                 } else {
                     NoteList(
                         notes = filteredNotes,
+                        activeCategoryName = activeCategoryName,
                         lang = lang,
-                        onNoteClick = { onNavigateToNoteDetail(it.id) },
+                        onNoteClick = handleNoteClick,
                         onPinClick = { noteViewModel.togglePin(it) },
-                        onDeleteClick = { noteViewModel.deleteNote(it) },
+                        onDeleteClick = { noteToDelete = it },
                         onReorder = { reorderedList -> noteViewModel.persistNoteOrder(reorderedList) },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
+        }
+
+        val strDeleteNoteTitle = stringResource(R.string.delete_note_title)
+        val strDeleteNoteConfirm = stringResource(R.string.delete_note_confirm)
+        val strDelete = stringResource(R.string.delete)
+        val strCancel = stringResource(R.string.cancel)
+        
+        val strEnterPassword = stringResource(R.string.enter_password)
+        val strIncorrectPassword = stringResource(R.string.incorrect_password)
+        val strOk = stringResource(R.string.ok)
+
+        if (noteToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { noteToDelete = null },
+                title = { Text(strDeleteNoteTitle) },
+                text = { Text(strDeleteNoteConfirm) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            noteToDelete?.let { noteViewModel.deleteNote(it) }
+                            noteToDelete = null
+                        }
+                    ) {
+                        Text(strDelete, color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { noteToDelete = null }) {
+                        Text(strCancel)
+                    }
+                }
+            )
+        }
+
+        if (noteToUnlock != null) {
+            AlertDialog(
+                onDismissRequest = { noteToUnlock = null },
+                title = { Text(strEnterPassword) },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = unlockPassword,
+                            onValueChange = { 
+                                unlockPassword = it
+                                unlockError = false 
+                            },
+                            singleLine = true,
+                            isError = unlockError
+                        )
+                        if (unlockError) {
+                            Text(strIncorrectPassword, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (unlockPassword == noteToUnlock?.password) {
+                                onNavigateToNoteDetail(noteToUnlock!!.id)
+                                noteToUnlock = null
+                            } else {
+                                unlockError = true
+                            }
+                        }
+                    ) {
+                        Text(strOk)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { noteToUnlock = null }) {
+                        Text(strCancel)
+                    }
+                }
+            )
         }
     }
 }
@@ -375,6 +467,7 @@ fun NoteListScreen(
 @Composable
 fun NoteGrid(
     notes: List<Note>,
+    activeCategoryName: String,
     lang: AppLanguage,
     onNoteClick: (Note) -> Unit,
     onPinClick: (Note) -> Unit,
@@ -418,6 +511,7 @@ fun NoteGrid(
                     },
                     onDrag = { change, dragAmount ->
                         if (draggedIndex != null) {
+                            change.consume()
                             dragOffset += dragAmount
                             
                             val visibleItems = lazyGridState.layoutInfo.visibleItemsInfo
@@ -487,7 +581,7 @@ fun NoteGrid(
 
         if (otherNotes.isNotEmpty()) {
             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else stringResource(R.string.app_name))
+                SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else activeCategoryName)
             }
             items(otherNotes, key = { it.id }) { note ->
                 val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
@@ -508,6 +602,7 @@ fun NoteGrid(
 @Composable
 fun NoteList(
     notes: List<Note>,
+    activeCategoryName: String,
     lang: AppLanguage,
     onNoteClick: (Note) -> Unit,
     onPinClick: (Note) -> Unit,
@@ -548,7 +643,8 @@ fun NoteList(
                     },
                     onDrag = { change, dragAmount ->
                         if (draggedIndex != null) {
-                            dragOffset += dragAmount
+                            change.consume()
+                            dragOffset = Offset(0f, dragOffset.y + dragAmount.y)
                             
                             val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
                             val draggedItemInfo = visibleItems.firstOrNull { it.key == localNotes[draggedIndex!!].id }
@@ -615,7 +711,7 @@ fun NoteList(
 
         if (otherNotes.isNotEmpty()) {
             item {
-                SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else stringResource(R.string.app_name))
+                SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else activeCategoryName)
             }
             items(otherNotes, key = { it.id }) { note ->
                 val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
@@ -712,10 +808,7 @@ fun NoteCard(
             }
             .shadow(elevation, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onPinClick
-            )
+            .clickable(onClick = onClick)
             .border(
                 width = if (note.isPinned) 1.5.dp else 0.dp,
                 color = if (note.isPinned) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -763,6 +856,16 @@ fun NoteCard(
                     }
 
                     Spacer(modifier = Modifier.width(4.dp))
+                    
+                    if (note.isLocked) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lock,
+                            contentDescription = stringResource(R.string.locked_note),
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
 
                     IconButton(
                         onClick = onDeleteClick,
@@ -792,7 +895,7 @@ fun NoteCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = note.content.ifEmpty { stringResource(R.string.no_content) },
+                text = if (note.isLocked) stringResource(R.string.locked_note) else note.content.ifEmpty { stringResource(R.string.no_content) },
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 4,

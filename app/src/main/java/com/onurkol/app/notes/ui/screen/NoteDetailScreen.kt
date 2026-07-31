@@ -28,6 +28,8 @@ import com.onurkol.app.notes.R
 import com.onurkol.app.notes.ui.viewmodel.NoteViewModel
 import com.onurkol.app.notes.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.flow.flowOf
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 private val noteColors = listOf(
     0xFFFFFFFF, // Default
@@ -70,8 +72,15 @@ fun NoteDetailScreen(
     var category by remember { mutableStateOf("Genel") }
     var isPinned by remember { mutableStateOf(false) }
     var colorHex by remember { mutableStateOf(0xFFFFFFFF) }
+    var isLocked by remember { mutableStateOf(false) }
+    var notePassword by remember { mutableStateOf<String?>(null) }
 
     var isInitialized by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var dialogPassword by remember { mutableStateOf("") }
+    var dialogError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(existingNoteState.value) {
         existingNoteState.value?.let { note ->
@@ -81,6 +90,8 @@ fun NoteDetailScreen(
                 category = note.category
                 isPinned = note.isPinned
                 colorHex = note.colorHex
+                isLocked = note.isLocked
+                notePassword = note.password
                 isInitialized = true
             }
         }
@@ -122,6 +133,17 @@ fun NoteDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { 
+                        showPasswordDialog = true
+                        dialogPassword = ""
+                        dialogError = false
+                    }) {
+                        Icon(
+                            imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                            contentDescription = stringResource(R.string.lock_note),
+                            tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                     IconButton(onClick = { isPinned = !isPinned }) {
                         Icon(
                             imageVector = Icons.Rounded.PushPin,
@@ -131,8 +153,7 @@ fun NoteDetailScreen(
                     }
                     if (noteId != null && noteId != 0L) {
                         IconButton(onClick = {
-                            noteViewModel.deleteNoteById(noteId)
-                            onBack()
+                            showDeleteConfirmDialog = true
                         }) {
                             Icon(
                                 imageVector = Icons.Rounded.Delete,
@@ -158,10 +179,12 @@ fun NoteDetailScreen(
                             isPinned = isPinned,
                             colorHex = colorHex,
                             category = category,
+                            isLocked = isLocked,
+                            password = notePassword,
                             onComplete = onBack
                         )
                     } else {
-                        onBack()
+                        Toast.makeText(context, context.getString(R.string.empty_note_warning), Toast.LENGTH_SHORT).show()
                     }
                 },
                 icon = { Icon(Icons.Rounded.Save, contentDescription = null) },
@@ -300,6 +323,94 @@ fun NoteDetailScreen(
             )
 
             Spacer(modifier = Modifier.height(80.dp)) // Leave space for FAB
+        }
+
+        val strDeleteNoteTitle = stringResource(R.string.delete_note_title)
+        val strDeleteNoteConfirm = stringResource(R.string.delete_note_confirm)
+        val strDelete = stringResource(R.string.delete)
+        val strCancel = stringResource(R.string.cancel)
+
+        val strSetPasswordTitle = stringResource(if (isLocked) R.string.remove_password else R.string.set_password)
+        val strEnterPassword = stringResource(R.string.enter_password)
+        val strIncorrectPassword = stringResource(R.string.incorrect_password)
+        val strOk = stringResource(R.string.ok)
+
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                title = { Text(strDeleteNoteTitle) },
+                text = { Text(strDeleteNoteConfirm) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            if (noteId != null) {
+                                noteViewModel.deleteNoteById(noteId)
+                                onBack()
+                            }
+                        }
+                    ) {
+                        Text(strDelete, color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                        Text(strCancel)
+                    }
+                }
+            )
+        }
+
+        if (showPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = { showPasswordDialog = false },
+                title = { Text(strSetPasswordTitle) },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = dialogPassword,
+                            onValueChange = { 
+                                dialogPassword = it
+                                dialogError = false
+                            },
+                            singleLine = true,
+                            isError = dialogError,
+                            placeholder = { Text(strEnterPassword) }
+                        )
+                        if (dialogError) {
+                            Text(strIncorrectPassword, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (isLocked) {
+                                if (dialogPassword == notePassword) {
+                                    isLocked = false
+                                    notePassword = null
+                                    showPasswordDialog = false
+                                } else {
+                                    dialogError = true
+                                }
+                            } else {
+                                if (dialogPassword.isNotBlank()) {
+                                    isLocked = true
+                                    notePassword = dialogPassword
+                                    showPasswordDialog = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(strOk)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPasswordDialog = false }) {
+                        Text(strCancel)
+                    }
+                }
+            )
         }
     }
 }

@@ -46,6 +46,8 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
         isPinned: Boolean = false,
         colorHex: Long = 0xFFFFFFFF,
         category: String = "General",
+        isLocked: Boolean = false,
+        password: String? = null,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -55,7 +57,9 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
                     content = content,
                     isPinned = isPinned,
                     colorHex = colorHex,
-                    category = category
+                    category = category,
+                    isLocked = isLocked,
+                    password = password
                 )
                 repository.insertNote(newNote)
             } else {
@@ -65,7 +69,9 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
                     content = content,
                     isPinned = isPinned,
                     colorHex = colorHex,
-                    category = category
+                    category = category,
+                    isLocked = isLocked,
+                    password = password
                 )
                 repository.updateNote(existingNote)
             }

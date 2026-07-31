@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">OK Notes</string>
+    <string name="app_name">OK Notlar</string>
     <string name="settings">Ayarlar</string>
     <string name="add_note">Yeni Not Ekle</string>
     <string name="new_note">Yeni Not</string>
@@ -39,4 +39,16 @@
     <string name="category_idea">Fikir</string>
     <string name="category_important">Önemli</string>
     <string name="category_all">Hepsi</string>
+    <string name="delete_note_title">Notu Sil</string>
+    <string name="delete_note_confirm">Bu notu silmek istediğinize emin misiniz?</string>
+    <string name="cancel">İptal</string>
+    <string name="empty_note_warning">Boş not kaydedilemez!</string>
+    <string name="lock_note">Notu Kilitle</string>
+    <string name="unlock_note">Kilidi Aç</string>
+    <string name="enter_password">Şifreyi Girin</string>
+    <string name="set_password">Şifre Belirle</string>
+    <string name="remove_password">Şifreyi Kaldır</string>
+    <string name="incorrect_password">Hatalı Şifre</string>
+    <string name="locked_note">Kilitli Not</string>
+    <string name="ok">Tamam</string>
 </resources>
