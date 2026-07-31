@@ -51,4 +51,7 @@
     <string name="incorrect_password">Hatalı Şifre</string>
     <string name="locked_note">Kilitli Not</string>
     <string name="ok">Tamam</string>
+    <string name="about_app">Uygulama Hakkında</string>
+    <string name="developer">Yapımcı: Onur Kol</string>
+    <string name="version_label">Sürüm: %s</string>
 </resources>

@@ -30,11 +30,19 @@ import com.onurkol.app.notes.ui.theme.OKNotesTheme
 import com.onurkol.app.notes.ui.viewmodel.NoteViewModel
 import com.onurkol.app.notes.ui.viewmodel.SettingsViewModel
 import com.onurkol.app.notes.ui.viewmodel.ViewModelFactory
+import com.startapp.sdk.adsbase.StartAppSDK
+import com.startapp.sdk.adsbase.StartAppAd
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Initialize StartApp SDK
+        StartAppSDK.setTestAdsEnabled(BuildConfig.DEBUG)
+        val startAppId = getString(R.string.startapp_app_id)
+        StartAppSDK.initParams(this, startAppId).init()
+        StartAppAd.disableSplash()
 
         // Initialize dependencies
         val database = AppDatabase.getDatabase(applicationContext)

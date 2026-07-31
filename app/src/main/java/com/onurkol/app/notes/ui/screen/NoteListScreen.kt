@@ -43,6 +43,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onurkol.app.notes.R
 import com.onurkol.app.notes.data.model.AppLanguage
 import com.onurkol.app.notes.data.model.Note
+import androidx.compose.ui.viewinterop.AndroidView
+import com.startapp.sdk.ads.banner.Banner
+import com.startapp.sdk.adsbase.model.AdPreferences
 import com.onurkol.app.notes.data.model.ViewMode
 import com.onurkol.app.notes.ui.viewmodel.NoteViewModel
 import com.onurkol.app.notes.ui.viewmodel.SettingsViewModel
@@ -386,6 +389,8 @@ fun NoteListScreen(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            StartAppBanner(modifier = Modifier.fillMaxWidth().height(50.dp))
         }
 
         val strDeleteNoteTitle = stringResource(R.string.delete_note_title)
@@ -914,4 +919,18 @@ fun NoteCard(
             )
         }
     }
+}
+
+@Composable
+fun StartAppBanner(modifier: Modifier = Modifier) {
+    AndroidView(
+        factory = { context ->
+            val adPrefs = AdPreferences().apply {
+                adTag = "NoteApp_MainBanner"
+                minCpm = 0.03
+            }
+            Banner(context, adPrefs)
+        },
+        modifier = modifier
+    )
 }

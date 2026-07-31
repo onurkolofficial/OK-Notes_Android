@@ -141,14 +141,14 @@ fun NoteDetailScreen(
                         Icon(
                             imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
                             contentDescription = stringResource(R.string.lock_note),
-                            tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { isPinned = !isPinned }) {
                         Icon(
                             imageVector = Icons.Rounded.PushPin,
                             contentDescription = stringResource(R.string.pin),
-                            tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            tint = if (isPinned) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     if (noteId != null && noteId != 0L) {

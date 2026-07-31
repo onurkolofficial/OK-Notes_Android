@@ -51,4 +51,8 @@
     <string name="incorrect_password">Incorrect Password</string>
     <string name="locked_note">Locked Note</string>
     <string name="ok">OK</string>
+    <string name="about_app">About Application</string>
+    <string name="developer">Developer: Onur Kol</string>
+    <string name="version_label">Version: %s</string>
+    <string name="startapp_app_id" translatable="false">209014105</string>
 </resources>
