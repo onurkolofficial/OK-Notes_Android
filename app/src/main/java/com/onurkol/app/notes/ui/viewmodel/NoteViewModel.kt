@@ -90,4 +90,14 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
             repository.updateNote(note.copy(isPinned = !note.isPinned))
         }
     }
+
+    fun persistNoteOrder(reorderedList: List<Note>) {
+        viewModelScope.launch {
+            val currentTime = System.currentTimeMillis()
+            reorderedList.forEachIndexed { index, note ->
+                val updatedNote = note.copy(timestamp = currentTime - index * 1000L)
+                repository.updateNote(updatedNote)
+            }
+        }
+    }
 }

@@ -6,14 +6,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,8 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,11 +50,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 private val categories = listOf(
-    "General",
-    "Work",
-    "Personal",
-    "Idea",
-    "Important"
+    "Genel",
+    "İş",
+    "Kişisel",
+    "Fikir",
+    "Önemli"
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -77,22 +84,19 @@ fun NoteListScreen(
         }
     }
 
-    val pinnedNotes = remember(filteredNotes) { filteredNotes.filter { it.isPinned } }
-    val otherNotes = remember(filteredNotes) { filteredNotes.filter { !it.isPinned } }
-
-    val catGeneral = stringResource(R.string.category_general)
-    val catWork = stringResource(R.string.category_work)
-    val catPersonal = stringResource(R.string.category_personal)
-    val catIdea = stringResource(R.string.category_idea)
-    val catImportant = stringResource(R.string.category_important)
+    val catGenel = stringResource(R.string.category_general)
+    val catIs = stringResource(R.string.category_work)
+    val catKisisel = stringResource(R.string.category_personal)
+    val catFikir = stringResource(R.string.category_idea)
+    val catOnemli = stringResource(R.string.category_important)
 
     fun getCategoryDisplayName(cat: String): String {
         return when (cat) {
-            "General" -> catGeneral
-            "Work" -> catWork
-            "Personal" -> catPersonal
-            "Idea" -> catIdea
-            "Important" -> catImportant
+            "Genel" -> catGenel
+            "İş" -> catIs
+            "Kişisel" -> catKisisel
+            "Fikir" -> catFikir
+            "Önemli" -> catOnemli
             else -> cat
         }
     }
@@ -248,8 +252,8 @@ fun NoteListScreen(
                                 label = { Text(stringResource(R.string.category_all)) },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             )
 
@@ -261,8 +265,8 @@ fun NoteListScreen(
                                     label = { Text(getCategoryDisplayName(cat)) },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 )
                             }
@@ -344,22 +348,22 @@ fun NoteListScreen(
                 // Content View
                 if (settings.viewMode == ViewMode.GRID) {
                     NoteGrid(
-                        pinnedNotes = pinnedNotes,
-                        otherNotes = otherNotes,
+                        notes = filteredNotes,
                         lang = lang,
                         onNoteClick = { onNavigateToNoteDetail(it.id) },
                         onPinClick = { noteViewModel.togglePin(it) },
                         onDeleteClick = { noteViewModel.deleteNote(it) },
+                        onReorder = { reorderedList -> noteViewModel.persistNoteOrder(reorderedList) },
                         modifier = Modifier.weight(1f)
                     )
                 } else {
                     NoteList(
-                        pinnedNotes = pinnedNotes,
-                        otherNotes = otherNotes,
+                        notes = filteredNotes,
                         lang = lang,
                         onNoteClick = { onNavigateToNoteDetail(it.id) },
                         onPinClick = { noteViewModel.togglePin(it) },
                         onDeleteClick = { noteViewModel.deleteNote(it) },
+                        onReorder = { reorderedList -> noteViewModel.persistNoteOrder(reorderedList) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -370,29 +374,110 @@ fun NoteListScreen(
 
 @Composable
 fun NoteGrid(
-    pinnedNotes: List<Note>,
-    otherNotes: List<Note>,
+    notes: List<Note>,
     lang: AppLanguage,
     onNoteClick: (Note) -> Unit,
     onPinClick: (Note) -> Unit,
     onDeleteClick: (Note) -> Unit,
+    onReorder: (List<Note>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lazyGridState = rememberLazyGridState()
+    var localNotes by remember(notes) { mutableStateOf(notes) }
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    val pinnedNotes = remember(localNotes) { localNotes.filter { it.isPinned } }
+    val otherNotes = remember(localNotes) { localNotes.filter { !it.isPinned } }
+
     LazyVerticalGrid(
+        state = lazyGridState,
         columns = GridCells.Fixed(2),
         contentPadding = PaddingValues(bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
+            .pointerInput(localNotes) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        val visibleItems = lazyGridState.layoutInfo.visibleItemsInfo
+                        val item = visibleItems.firstOrNull { visibleItem ->
+                            offset.x.toInt() in visibleItem.offset.x..(visibleItem.offset.x + visibleItem.size.width) &&
+                            offset.y.toInt() in visibleItem.offset.y..(visibleItem.offset.y + visibleItem.size.height)
+                        }
+                        if (item != null) {
+                            val noteId = item.key as? Long
+                            if (noteId != null) {
+                                val idx = localNotes.indexOfFirst { it.id == noteId }
+                                if (idx != -1) {
+                                    draggedIndex = idx
+                                    dragOffset = Offset.Zero
+                                }
+                            }
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        if (draggedIndex != null) {
+                            dragOffset += dragAmount
+                            
+                            val visibleItems = lazyGridState.layoutInfo.visibleItemsInfo
+                            val draggedItemInfo = visibleItems.firstOrNull { it.key == localNotes[draggedIndex!!].id }
+                            if (draggedItemInfo != null) {
+                                val draggedItemCenterX = draggedItemInfo.offset.x + draggedItemInfo.size.width / 2 + dragOffset.x
+                                val draggedItemCenterY = draggedItemInfo.offset.y + draggedItemInfo.size.height / 2 + dragOffset.y
+                                
+                                val crossedItem = visibleItems.firstOrNull { otherItem ->
+                                    otherItem.key is Long && otherItem.key != draggedItemInfo.key &&
+                                    draggedItemCenterX.toInt() in otherItem.offset.x..(otherItem.offset.x + otherItem.size.width) &&
+                                    draggedItemCenterY.toInt() in otherItem.offset.y..(otherItem.offset.y + otherItem.size.height)
+                                }
+                                
+                                if (crossedItem != null) {
+                                    val crossedNoteId = crossedItem.key as Long
+                                    val targetIndex = localNotes.indexOfFirst { it.id == crossedNoteId }
+                                    if (targetIndex != -1) {
+                                        val mutableList = localNotes.toMutableList()
+                                        // Custom swap implementation
+                                        val temp = mutableList[draggedIndex!!]
+                                        mutableList[draggedIndex!!] = mutableList[targetIndex]
+                                        mutableList[targetIndex] = temp
+                                        localNotes = mutableList
+                                        
+                                        dragOffset = Offset(
+                                            x = dragOffset.x - (crossedItem.offset.x - draggedItemInfo.offset.x),
+                                            y = dragOffset.y - (crossedItem.offset.y - draggedItemInfo.offset.y)
+                                        )
+                                        draggedIndex = targetIndex
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        if (draggedIndex != null) {
+                            onReorder(localNotes)
+                            draggedIndex = null
+                            dragOffset = Offset.Zero
+                        }
+                    },
+                    onDragCancel = {
+                        draggedIndex = null
+                        dragOffset = Offset.Zero
+                    }
+                )
+            }
     ) {
         if (pinnedNotes.isNotEmpty()) {
             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                 SectionHeader(stringResource(R.string.pinned_section))
             }
             items(pinnedNotes, key = { it.id }) { note ->
+                val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
                 NoteCard(
                     note = note,
                     lang = lang,
+                    isDraggingThis = isDraggingThis,
+                    dragOffset = dragOffset,
                     onClick = { onNoteClick(note) },
                     onPinClick = { onPinClick(note) },
                     onDeleteClick = { onDeleteClick(note) }
@@ -405,9 +490,12 @@ fun NoteGrid(
                 SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else stringResource(R.string.app_name))
             }
             items(otherNotes, key = { it.id }) { note ->
+                val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
                 NoteCard(
                     note = note,
                     lang = lang,
+                    isDraggingThis = isDraggingThis,
+                    dragOffset = dragOffset,
                     onClick = { onNoteClick(note) },
                     onPinClick = { onPinClick(note) },
                     onDeleteClick = { onDeleteClick(note) }
@@ -419,27 +507,105 @@ fun NoteGrid(
 
 @Composable
 fun NoteList(
-    pinnedNotes: List<Note>,
-    otherNotes: List<Note>,
+    notes: List<Note>,
     lang: AppLanguage,
     onNoteClick: (Note) -> Unit,
     onPinClick: (Note) -> Unit,
     onDeleteClick: (Note) -> Unit,
+    onReorder: (List<Note>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lazyListState = rememberLazyListState()
+    var localNotes by remember(notes) { mutableStateOf(notes) }
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    val pinnedNotes = remember(localNotes) { localNotes.filter { it.isPinned } }
+    val otherNotes = remember(localNotes) { localNotes.filter { !it.isPinned } }
+
     LazyColumn(
+        state = lazyListState,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
+            .pointerInput(localNotes) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+                        val item = visibleItems.firstOrNull { visibleItem ->
+                            offset.y.toInt() in visibleItem.offset..(visibleItem.offset + visibleItem.size)
+                        }
+                        if (item != null) {
+                            val noteId = item.key as? Long
+                            if (noteId != null) {
+                                val idx = localNotes.indexOfFirst { it.id == noteId }
+                                if (idx != -1) {
+                                    draggedIndex = idx
+                                    dragOffset = Offset.Zero
+                                }
+                            }
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        if (draggedIndex != null) {
+                            dragOffset += dragAmount
+                            
+                            val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+                            val draggedItemInfo = visibleItems.firstOrNull { it.key == localNotes[draggedIndex!!].id }
+                            if (draggedItemInfo != null) {
+                                val draggedItemCenterY = draggedItemInfo.offset + draggedItemInfo.size / 2 + dragOffset.y
+                                
+                                val crossedItem = visibleItems.firstOrNull { otherItem ->
+                                    otherItem.key is Long && otherItem.key != draggedItemInfo.key &&
+                                    draggedItemCenterY.toInt() in otherItem.offset..(otherItem.offset + otherItem.size)
+                                }
+                                
+                                if (crossedItem != null) {
+                                    val crossedNoteId = crossedItem.key as Long
+                                    val targetIndex = localNotes.indexOfFirst { it.id == crossedNoteId }
+                                    if (targetIndex != -1) {
+                                        val mutableList = localNotes.toMutableList()
+                                        // Custom swap implementation
+                                        val temp = mutableList[draggedIndex!!]
+                                        mutableList[draggedIndex!!] = mutableList[targetIndex]
+                                        mutableList[targetIndex] = temp
+                                        localNotes = mutableList
+                                        
+                                        dragOffset = Offset(
+                                            x = 0f, // list reorder is vertical only
+                                            y = dragOffset.y - (crossedItem.offset - draggedItemInfo.offset)
+                                        )
+                                        draggedIndex = targetIndex
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        if (draggedIndex != null) {
+                            onReorder(localNotes)
+                            draggedIndex = null
+                            dragOffset = Offset.Zero
+                        }
+                    },
+                    onDragCancel = {
+                        draggedIndex = null
+                        dragOffset = Offset.Zero
+                    }
+                )
+            }
     ) {
         if (pinnedNotes.isNotEmpty()) {
             item {
                 SectionHeader(stringResource(R.string.pinned_section))
             }
             items(pinnedNotes, key = { it.id }) { note ->
+                val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
                 NoteCard(
                     note = note,
                     lang = lang,
+                    isDraggingThis = isDraggingThis,
+                    dragOffset = dragOffset,
                     onClick = { onNoteClick(note) },
                     onPinClick = { onPinClick(note) },
                     onDeleteClick = { onDeleteClick(note) }
@@ -452,9 +618,12 @@ fun NoteList(
                 SectionHeader(if (pinnedNotes.isNotEmpty()) stringResource(R.string.other_section) else stringResource(R.string.app_name))
             }
             items(otherNotes, key = { it.id }) { note ->
+                val isDraggingThis = draggedIndex != null && localNotes[draggedIndex!!].id == note.id
                 NoteCard(
                     note = note,
                     lang = lang,
+                    isDraggingThis = isDraggingThis,
+                    dragOffset = dragOffset,
                     onClick = { onNoteClick(note) },
                     onPinClick = { onPinClick(note) },
                     onDeleteClick = { onDeleteClick(note) }
@@ -482,6 +651,8 @@ fun SectionHeader(title: String) {
 fun NoteCard(
     note: Note,
     lang: AppLanguage,
+    isDraggingThis: Boolean = false,
+    dragOffset: Offset = Offset.Zero,
     onClick: () -> Unit,
     onPinClick: () -> Unit,
     onDeleteClick: () -> Unit,
@@ -502,22 +673,28 @@ fun NoteCard(
         sdf.format(Date(note.timestamp))
     }
 
-    val catGeneral = stringResource(R.string.category_general)
-    val catWork = stringResource(R.string.category_work)
-    val catPersonal = stringResource(R.string.category_personal)
-    val catIdea = stringResource(R.string.category_idea)
-    val catImportant = stringResource(R.string.category_important)
+    val catGenel = stringResource(R.string.category_general)
+    val catIs = stringResource(R.string.category_work)
+    val catKisisel = stringResource(R.string.category_personal)
+    val catFikir = stringResource(R.string.category_idea)
+    val catOnemli = stringResource(R.string.category_important)
 
-    val displayCategory = remember(note.category, catGeneral, catWork, catPersonal, catIdea, catImportant) {
+    val displayCategory = remember(note.category, catGenel, catIs, catKisisel, catFikir, catOnemli) {
         when (note.category) {
-            "General" -> catGeneral
-            "Work" -> catWork
-            "Personal" -> catPersonal
-            "Idea" -> catIdea
-            "Important" -> catImportant
+            "Genel" -> catGenel
+            "İş" -> catIs
+            "Kişisel" -> catKisisel
+            "Fikir" -> catFikir
+            "Önemli" -> catOnemli
             else -> note.category
         }
     }
+
+    val translationX = if (isDraggingThis) dragOffset.x else 0f
+    val translationY = if (isDraggingThis) dragOffset.y else 0f
+    val scale = if (isDraggingThis) 1.06f else 1f
+    val elevation = if (isDraggingThis) 12.dp else 0.dp
+    val alpha = if (isDraggingThis) 0.9f else 1f
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -526,6 +703,14 @@ fun NoteCard(
         ),
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                this.translationX = translationX
+                this.translationY = translationY
+                this.scaleX = scale
+                this.scaleY = scale
+                this.alpha = alpha
+            }
+            .shadow(elevation, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onClick,
@@ -547,7 +732,7 @@ fun NoteCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Category Chip/Badge
+                // Category Badge
                 Box(
                     modifier = Modifier
                         .background(
